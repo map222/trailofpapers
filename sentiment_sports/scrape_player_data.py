@@ -1,8 +1,58 @@
+import json
 import requests
 import time
 import string
 import pandas as pd
 from bs4 import BeautifulSoup
+
+def get_year_performance_nba( year: int):
+    ''' Scrape performance data from basketball-reference.com
+        return: dataframe with columns about player performance and team
+            keys are: str column Player (lowercase)
+                      int column Year
+    '''
+    # get which team the player played on the most (important for traded players)
+    team_player_df = get_player_team_nba(year)
+    
+    # get advanced stats (for players who get traded, "TOT" is first line, and is kept)
+    adv_url = f'https://www.basketball-reference.com/leagues/NBA_{year}_advanced.html'
+    advanced_df = (pd.read_html(adv_url)[0]
+                     .drop_duplicates('Player', keep = 'first')
+                     .query('Player != "Player"')
+                     .drop(columns = 'Tm')
+                     .merge(team_player_df, on='Player') )
+    advanced_df['Player'] = advanced_df['Player'].str.lower()
+    
+    # get basic stats like points, rebounds, and assists
+    basic_url = f'https://www.basketball-reference.com/leagues/NBA_{year}_per_game.html'
+    basic_df = (pd.read_html(basic_url)[0]
+                    .drop_duplicates('Player', keep = 'first')
+                    .query('Player != "Player"')
+                    .iloc[:,[1] +  list(range(8,30))]) # this is just player name and stats columns
+    basic_df['Player'] = basic_df['Player'].str.lower()
+    
+    # combine the dataframes and return them
+    return (advanced_df.merge(basic_df, on='Player')
+                       .assign(year = year)
+                       .convert_objects(convert_numeric=True)
+                        # rename these columns, as they mess up R formula
+                       .rename(columns = {'PS/G':'PPG',
+                                          '3P%':'ThreePP',
+                                          'TRB%':'TRBP',
+                                          'AST%':'ASTP',
+                                          'BLK%':'BLKP',
+                                          'STL%':'STLP' }))
+
+def get_player_team_nba(year: int):
+    ''' Create a DF of which team each player played the most on (important for players who get traded)
+    returns a dataframe with two string columns: Player and Tm
+        used by `get_year_performance_nba`
+    '''
+    team_player_df = (pd.read_html(f'https://www.basketball-reference.com/leagues/NBA_{year}_advanced.html')[0]
+                        .query('Tm != "TOT" and Player != "Player"')
+                     )[['Player', 'Tm', 'G']].convert_objects(convert_numeric=True)
+    return (team_player_df.sort_values(by=['Player', 'G'], ascending=False)
+                                    .drop_duplicates('Player'))[['Player', 'Tm']]
 
 def get_position_performance_nfl(pos:str, year=2017, 
                                  url = 'https://www.footballoutsiders.com/stats/'):
@@ -114,8 +164,8 @@ def get_pro_football_profile(player_url):
         return 0, 0, 'May 25, 1700'
     return height, weight, birth_date
 
-def get_black_players_wiki():
-    """Get list of black players from Wikipedia
+def get_category_players_wiki(category = 'Category:African-American_players_of_American_football'):
+    """Get list of players in a category from Wikipedia
 
     returns: pandas dataframe with single column of player names
     """
@@ -125,7 +175,7 @@ def get_black_players_wiki():
         wiki_url = 'https://en.wikipedia.org/w/api.php'
         wiki_params = {'action':'query',
                          'list':'categorymembers',
-                         'cmtitle':'Category:African-American_players_of_American_football',
+                         'cmtitle': category,
                          'format':'json',
                          'cmlimit':500,
                          'cmcontinue':continue_str}
@@ -135,4 +185,7 @@ def get_black_players_wiki():
         if 'continue' not in cat_json:
             break
         continue_str = cat_json['continue']['cmcontinue']
-    return pd.DataFrame(player_list)
+    player_df = pd.DataFrame(player_list).rename(columns={'title':'Player'})
+    player_df['Player'] = player_df['Player'].str.split('(').str[0].str.strip()
+    player_df['Player'] = player_df['Player'].str.lower()
+    return player_df[['Player']]

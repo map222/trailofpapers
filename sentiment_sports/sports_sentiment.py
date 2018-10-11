@@ -1,71 +1,19 @@
 import string
 import pandas as pd
 import dask.dataframe as dd
-from dask import get
 from ast import literal_eval
 from fuzzywuzzy import process as fuzzy_process
 from fuzzywuzzy import fuzz
 from sner import Ner
-from nltk import word_tokenize, sent_tokenize, pos_tag, ne_chunk
-from nltk.sentiment.vader import SentimentIntensityAnalyzer
+from nltk import sent_tokenize
 from typing import Callable
 
-def get_year_performance_nba( year: int):
-    ''' Scrape performance data from basketball reference.
-        return: dataframe with columns about player performance and team
-            keys are: str column Player (lowercase)
-                      int column Year
-    '''
-    # get which team the player played on the most (important for traded players)
-    team_player_df = get_player_team_nba(year)
-    
-    # get advanced stats (for players who get traded, "TOT" is first line, and is kept)
-    adv_url = f'https://www.basketball-reference.com/leagues/NBA_{year}_advanced.html'
-    advanced_df = (pd.read_html(adv_url)[0]
-                     .drop_duplicates('Player', keep = 'first')
-                     .query('Player != "Player"')
-                     .drop(columns = 'Tm')
-                     .merge(team_player_df, on='Player') )
-    advanced_df['Player'] = advanced_df['Player'].str.lower()
-    
-    # get basic stats like points, rebounds, and assists
-    basic_url = f'https://www.basketball-reference.com/leagues/NBA_{year}_per_game.html'
-    basic_df = (pd.read_html(basic_url)[0]
-                    .drop_duplicates('Player', keep = 'first')
-                    .query('Player != "Player"')
-                    .iloc[:,[1] +  list(range(8,30))]) # this is just player name and stats columns
-    basic_df['Player'] = basic_df['Player'].str.lower()
-    
-    # combine the dataframes and return them
-    return (advanced_df.merge(basic_df, on='Player')
-                       .assign(year = year)
-                       .convert_objects(convert_numeric=True)
-                        # rename these columns, as they mess up R formula
-                       .rename(columns = {'PS/G':'PPG',
-                                          '3P%':'ThreePP',
-                                          'TRB%':'TRBP',
-                                          'AST%':'ASTP',
-                                          'BLK%':'BLKP',
-                                          'STL%':'STLP' }))
-
-def get_player_team_nba(year: int):
-    ''' Create a DF of which team each player played the most on (important for players who get traded)
-    returns a dataframe with two string columns: Player and Tm
-        used by `get_year_performance_nba`
-    '''
-    team_player_df = (pd.read_html(f'https://www.basketball-reference.com/leagues/NBA_{year}_advanced.html')[0]
-                        .query('Tm != "TOT" and Player != "Player"')
-                     )[['Player', 'Tm', 'G']].convert_objects(convert_numeric=True)
-    return (team_player_df.sort_values(by=['Player', 'G'], ascending=False)
-                                    .drop_duplicates('Player'))[['Player', 'Tm']]
-
-def create_sentiment_df(comment_df_loc: str, sentiment_analyzer:Callable, UNIQUE_NAMES:set,
-                        ner_set = set(), non_players_set = {}):
+def create_sentiment_df(comment_df_loc: str, sentiment_analyzer:Callable, 
+                        ner_set = set(), non_players_set = {}, UPPER_NAMES = set()):
     ''' Main function that loads a month of player comments and:
         1. Separates comments into sentences
         2. Performs NER either via NLTK, or using pre-existing list of entities
         3. Calculates sentiment
-        4. Performs fuzzy matching between comments and list of players
 
     parameters:
         comment_df_loc: str for file location of gzipped player comments
@@ -74,6 +22,12 @@ def create_sentiment_df(comment_df_loc: str, sentiment_analyzer:Callable, UNIQUE
         UNIQUE_NAMES: set of player names for fuzzy matching (cannot be empty)
         ner_set: a list of named entities to extract (rather than doing NER)
         non_players_set: list of named entities to remove (e.g. team names)
+        UPPER_NAMES: set of player names for upper case matching (e.g. 'Love')
+
+    returns:
+        two pandas dataframes:
+        ner_df: dataframe with just the entities extracted
+        sentiment_df: dataframe with columns for sentences, user, extracted entities, and sentiment
     '''
     STR_COL = 'str_entities'
     FUZZY_COL='fuzzy_name'
@@ -101,7 +55,7 @@ def create_sentiment_df(comment_df_loc: str, sentiment_analyzer:Callable, UNIQUE
     
     print('Extracting named entities')
     if len(ner_set) > 0:
-        ner_df = extract_known_ner(sentences_df, ner_set)
+        ner_df = extract_known_ner(sentences_df, ner_set, UPPER_NAMES)
     else:
         ner_df = extract_unknown_ner(sentences_df)
         
@@ -111,11 +65,6 @@ def create_sentiment_df(comment_df_loc: str, sentiment_analyzer:Callable, UNIQUE
     print('Calculating sentiment')
     sentiment_df = calculate_sentiment(ner_df, sentiment_analyzer)
     
-    print('Fuzzy matching player names')
-    fuzzy_df = pd.DataFrame(sentiment_df[STR_COL].unique(), columns = [STR_COL])
-    fuzzy_df[FUZZY_COL] = fuzzy_df[STR_COL].apply(lambda row: find_player(row, UNIQUE_NAMES))
-    sentiment_df = sentiment_df.merge(fuzzy_df, on=STR_COL)
-
     print('Returning {} sentences with clear player name'.format(sentiment_df.shape[0]))
 
     return ner_df, sentiment_df
@@ -145,6 +94,7 @@ def chunk_comments_sentences(comment_df: pd.DataFrame, text_col = 'text'):
 def extract_unknown_ner(sentences_df, SENTENCES_COL = 'sentences', NER_COL = 'named_entities', ner_port = 9199):
     ''' Extracted named entities using Stanford's NER.
         Requires a java server be already launched.
+
         sentences_df: pandas dataframe with one column that contains non-lowercased sentences
         SENTENCES_COL: name of column with sentences
         NER_COL: str name of column for output
@@ -189,18 +139,26 @@ def extract_known_ner(sentences_df: pd.DataFrame, NER_SET, UPPER_SET = {'Love', 
     return sentences_df
 
 def clean_entities(sentences_df, NER_COL = 'named_entities', STR_COL = 'str_entities', non_players_set = {}):
-    ''' Clean up the entities by
-        1. Removing known non-player entities (e.g. teams, NBA, Coaches)
-        2. Removing sentences that have 0 entities, or > 2 entities (i.e. multiple players)
+    ''' Clean up the entities by: 
+        1. Lower casing and removing punctuation
+        2. Removing known non-player entities (e.g. teams, NBA, Coaches)
+        3. Removing sentences that have 0 entities, or > 2 entities (i.e. multiple players)
+
+        sentences_df: pandas dataframe with a column that has list of matched entities (NER_COL)
+        STR_COL: name of new column for combined str entities
+        non_players_set: set of entities that are not players to be filtered out
+
+        returns: pandas dataframe with new col STR_COL that contains entities (e.g. 'first last')
     '''
     # clean up entities
-    sentences_df[NER_COL] = sentences_df[NER_COL].apply(lambda entities: [entity.strip(punctuation) for entity in entities])
+    sentences_df[NER_COL] = sentences_df[NER_COL].apply(lambda entities: [entity.strip(string.punctuation) for entity in entities])
     sentences_df[NER_COL] = sentences_df[NER_COL].apply(lambda entities: [entity.lower() for entity in entities])
     
-    # remove known non-player entities, and filter out rows with non-unique entities
-    sentences_df[NER_COL] = sentences_df[NER_COL].apply(lambda entities: [entity for entity in entities if entity not in non_players_set])
+    # filter out rows with non-unique entities, then remove known non-player entities, and ensure there still is one
     sentences_df = sentences_df[sentences_df[NER_COL].str.len() > 0] # only care if we can find entity
     sentences_df = sentences_df[sentences_df[NER_COL].str.len() <3]
+    sentences_df[NER_COL] = sentences_df[NER_COL].apply(lambda entities: [entity for entity in entities if entity not in non_players_set])
+    sentences_df = sentences_df[sentences_df[NER_COL].str.len() > 0] # only care if we can find entity
     
     sentences_df[STR_COL] = sentences_df[NER_COL].apply(lambda entities: ' '.join(entities))
     
@@ -224,11 +182,44 @@ def calculate_sentiment(sentences_df:pd.DataFrame, sentiment_analyzer: Callable,
     
     return sentences_df
 
+def fuzzy_match_players( sentiment_df: pd.DataFrame, UNIQUE_NAMES: set, STR_COL = 'str_entities'):
+    ''' Given a dataframe with a list of entities as a string, return the closest fuzzy match.
+        This works by taking all unique entities in the dataframe, and find the fuzzy match for it.
+        Then merge these fuzzy matches back onto the original dataframe.
+        This was broken into its own function, as fuzzywuzzy is quite slow
+
+        sentiment_df: pandas dataframe with a column `STR_COL`
+        UNIQUE_NAMES: set of player names to try to match against
+
+        returns: pandas dataframe with a string column for the player that was fuzzy matched
+    '''
+
+    # dask parameters
+    num_workers = 8
+    num_partitions = int(2* num_workers - 1)
+
+    print('Fuzzy matching player names')
+    # use dask to speed up the process; without dask it takes 0.2 seconds / match
+    fuzzy_df = pd.DataFrame(sentiment_df[STR_COL].unique(), columns = [STR_COL])
+    ddf = dd.from_pandas(fuzzy_df, npartitions=num_partitions)
+    ddf['fuzzy_name'] = ddf.map_partitions(lambda df: df['str_entities'].apply(lambda row: find_player(row, UNIQUE_NAMES) ) )
+    fuzzy_df = ddf.compute(num_workers=num_workers, scheduler='processes')
+
+    sentiment_df = sentiment_df.merge(fuzzy_df, on=STR_COL)
+
+    return sentiment_df
+
 def find_player( potential_name: str, unique_names:set ):
+    ''' Fuzzy match an entity to one entity from a set
+
+        potential_name: string name of an entity (e.g. a player name, like "lebron")
+        unique_names: set of string player names ('first last') to be matched against
+    '''
     names = fuzzy_process.extractBests(potential_name, unique_names, score_cutoff=87) # 87 means that "klay kd" matches nothing, but "curry" matches "stephen curry"
     
+    # if there are more than 2 names, and they have the same score, no clear match
     if (len(names) > 1 and names[0][1] == names[1][1]) or len(names) == 0:
     # no clear match, return 'unclear match'
         return 'unclear'
-    # only one similar, or clear top similar
+    # there is only one similar name, or a clear top similar name
     return names[0][0]
