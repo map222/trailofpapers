@@ -1,0 +1,176 @@
+%\documentclass[11pt]{article}
+\documentclass[11pt]{article}
+%\usepackage[T1]{fontenc}
+\usepackage[latin1]{inputenc}
+%\usepackage[margin=1in]{geometry}
+\usepackage[margin=1.35in]{geometry}
+%\usepackage{natbib} 
+%\usepackage{fullpage}
+\usepackage{graphicx}
+\usepackage{lscape}
+%\usepackage{apalike}
+\usepackage{setspace}
+\usepackage{subcaption}
+\usepackage{amsmath}
+\usepackage{color}
+\usepackage{sgame}
+\usepackage{url}
+\usepackage{wrapfig}
+\usepackage{sgamevar}
+\usepackage{booktabs} % Table formatting \toprule, etc.
+\usepackage{amsmath,amssymb,amsthm,cancel,staves}
+\usepackage{mathtools}
+\usepackage{enumitem}
+\usepackage{titlesec}
+\usepackage{tikz}
+\usepackage{breakcites}
+\usepackage{indentfirst}
+\usetikzlibrary{arrows}
+
+\usepackage{accents}
+
+\usepackage{amsmath}
+\DeclareMathOperator*{\argmax}{arg\,max}
+\DeclareMathOperator*{\argmin}{arg\,min}
+\newcommand{\ATT}{\textrm{ATT}}
+\newcommand{\ATE}{\textrm{ATE}}
+\newcommand{\ATUT}{\textrm{ATUT}}
+\newcommand{\ji}{j_m(i)}
+\newcommand{\li}{l_m(i)}
+\newcommand{\tli}{\tilde{l}_m(i)}
+\newcommand{\Navg}{\frac{1}{N} \sum_{i}}
+\newcommand{\Tavg}{\frac{1}{N_1} \sum_{i:T_i=1}}
+\newcommand{\Cavg}{\frac{1}{N_0} \sum_{i:T_i=0}}
+\newcommand{\Mavg}{\frac{1}{M}\sum_{m=1}^M}
+
+\vfuzz2pt % Don't report over-full v-boxes if over-edge is small
+\hfuzz2pt % Don't report over-full h-boxes if over-edge is small
+% THEOREMS --------------------------------------- ----------------
+\newtheorem{theorem}{Theorem}[section]
+\newtheorem{corollary}{Corollary}[section]
+\newtheorem{lemma}{Lemma}[section]
+\newtheorem{proposition}{Proposition}[section]
+\newtheorem{assumption}{Assumption}
+\newtheorem{definition}{Definition}[section]
+\newtheorem{condition}{Condition}[section]
+\newtheorem{comment}{Comment}[section]
+
+\theoremstyle{definition}
+
+\newtheorem{algorithm}{Algorithm}
+\newtheorem{step}{Step}
+%\newtheorem{remark}{Comment}[section]
+%\newtheorem{comment}{Comment}[section]
+\newtheorem{example}{Example}
+\newtheorem{remark}{Remark}
+\numberwithin{remark}{section}
+\numberwithin{equation}{section}
+\numberwithin{theorem}{section}
+
+\newcommand{\eps}{\varepsilon}
+\newcommand{\mtau}{uj}
+
+\newcommand{\F}{\mathcal{F}}
+\providecommand{\indx}{\alpha}
+\newcommand{\barEp}{\bar \Ep}
+\renewcommand{\Pr}{{\mathrm{P}}}
+\newcommand{\Proj}{{\mathcal{P}_{X[\hat I]}}}
+\newcommand{\barf}{\overline{f}}
+\newcommand{\barfp}{\overline{f'}}
+\newcommand{\Uniform}{{\text{Uniform}}}
+\newcommand{\diam}{{\text{diam}}}
+\newcommand{\tr}{\mathrm{Tr}}
+
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+\renewcommand{\hat}{\widehat}
+
+\renewcommand{\Pr}{{\mathrm{P}}}
+\newcommand{\RR}{\mathbb{R}}
+\newcommand{\un}{{\rm u_n}}
+\newcommand{\cv}{{\rm cv}}
+\newcommand{\pp}{{\tilde p}}
+\newcommand{\uu}{{u}}
+\newcommand{\UU}{\mathcal{U}}
+\newcommand{\UUU}{\widetilde{\mathcal{U}}}
+\newcommand{\tu}{{\tilde u}}
+\newcommand{\floor}[1]{\left\lfloor #1 \right\rfloor}
+\newcommand{\ceil}[1]{\left\lceil #1 \right\rceil}
+\newcommand{\semin}[1]{\phi_{{\rm min}}(#1)}
+\newcommand{\semax}[1]{\phi_{{\rm max}}(#1)}
+\renewcommand{\hat}{\widehat}
+\renewcommand{\leq}{\leqslant}
+\renewcommand{\geq}{\geqslant}
+\newcommand{\sign}{ {\rm sign}}
+
+\DeclareMathOperator{\pr}{pr}
+\DeclareMathOperator*{\argminA}{arg\,min}
+
+
+\DeclareMathOperator{\Corr}{Corr}
+\DeclareMathOperator{\Var}{Var}
+\newcommand{\hvpi}{{\hat \varphi_{i}}}
+\newcommand{\vpi}{{\varphi_{i}}}
+\newcommand{\diag}{{\rm diag}}
+\newcommand{\underf}{{\underline{f}}}
+
+%%--- added definition for functional response data
+\newcommand{\dn}{{d_u}}%{{\iota}}
+\newcommand{\cc}{\mathbf{c}}
+\renewcommand{\(}{\left(}
+\renewcommand{\)}{\right)}
+\renewcommand{\[}{\left[}
+\renewcommand{\]}{\right]}
+
+
+\begin{document}
+
+\title{Racism on Reddit? \\ Determinants of Sentiment in Online Posting About NBA Players}
+\author{
+	Michael Patterson\thanks{email here}\\
+	{Microsoft}
+	\and
+	Matt Goldman
+	\thanks{mattgoldman5850@gmail.com}\\
+	{Facebook}
+}
+\date{%March 2005\\
+	%Current Version 
+	\today }%\quad\timestamp}
+
+\maketitle
+
+\vfil
+\begin{center}
+	INCOMPLETE DRAFT \\
+	\textbf{PLEASE DO NOT CIRCULATE}
+\end{center}
+\vfil
+
+\begin{abstract} 
+Not too abstract.
+\end{abstract}
+
+
+\section{Introduction}
+
+President Trump and Nike express different opinions about Colin Kaepernick. But are these real preferences or just appeals to their audiences? This parallels the literature of discrimination in professional sports, where studies have focused on salary differentials or referee performance, but often could not determine whether disparities were driven by organizational bias or fan preferences. Typically, these studies had difficulty constructing appropriate measures of fan sentiment  or isolating the impact of particular characteristics (for example race).
+
+We apply standard techniques in natural language processing to quantify the sentiment of >700,000 player-specific comments from reddit.com/r/nba. We find sentiment is most positive towards young, old, and high-performing players. After controlling for these factors, we estimate that in aggregate whiteness does not statistically significantly predict player sentiment (t=1.20). Whiteness is at most worth an additional 2.3 points of PER or an additional 3 years of player youth. However, we do find that sentiment is higher for non-white players in cities where Hillary Clinton performed well in 2016 (t=2.15), but that this is not true for white players.
+
+
+\section{Methodology}
+
+To create a corpus of player related comments, we scraped reddit/r/nba for comments during the 2017-2018 season. For each comment, we used Named Entity Recognition to identify players, and filtered out comments that did not contain exactly one player mention. Next, we used NLTK to calculate the sentiment for each comment  and aggregated the sentiment scores at the player level. Our sentiment scores pass the sniff test, as unpopular players like Zaza Pachulia had the lowest scores.
+
+The left panel of Fig. 1 shows, unsurprisingly, that this metric is noisier for players with few comments. The right panel of Fig. 1 shows how sentiment increases for older (t=1.77) and younger (t=4.14) players.
+
+\section{Results}
+
+We joined the sentiment scores to performance and demographic data to perform a WLS regression analysis, as shown in Table 2. 
+
+\section{Conclusion}
+
+We provide a framework to test for idiosyncrasies in fan preferences. This may help understand what determines an athlete?s brand value or incentives for apparently biased behavior by organizations. It can easily be expanded by including new text sources (Twitter) or be applied to other domains for comparative analysis (like the NFL). Our findings bolster the view that racial bias is not a large determinant of fan sentiment, but that non-white players may be polarizing along the axis of the 2016 election.
+
+\end{document}
