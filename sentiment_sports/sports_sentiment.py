@@ -125,13 +125,13 @@ def extract_known_ner(sentences_df: pd.DataFrame, NER_SET, UPPER_SET = {'Love', 
         ner_set: set of lower-cased named entities
     '''
     # First do an extraction for Love, Smart, etc.
-    upper_filter = lambda sentence: list(filter(lambda word: word.strip(string.punctuation) in UPPER_SET, sentence.split() ))
+    upper_filter = lambda sentence: list(filter(lambda word: word.strip(string.punctuation).strip("'s'") in UPPER_SET, sentence.split() ))
     sentences_df[UPPER_COL] = sentences_df[SENTENCES_COL].apply(upper_filter)
     
     sentences_df[SENTENCES_COL] = sentences_df[SENTENCES_COL].str.lower()
     
     # tokenize sentence with split, and use filter to find named entities
-    ner_filter = lambda sentence: list(filter(lambda word: word.strip(string.punctuation) in NER_SET, sentence.split() ))
+    ner_filter = lambda sentence: list(filter(lambda word: word.strip(string.punctuation).strip("'s'") in NER_SET, sentence.split() ))
     sentences_df[NER_COL] = sentences_df[SENTENCES_COL].apply(ner_filter)
     
     sentences_df[NER_COL] = sentences_df.apply(lambda row: row[NER_COL] + [word.lower() for word in row[UPPER_COL]], axis=1)
