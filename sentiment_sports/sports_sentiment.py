@@ -65,7 +65,7 @@ def create_sentiment_df(comment_df_loc: str, sentiment_analyzer:Callable,
     print('Calculating sentiment')
     sentiment_df = calculate_sentiment(ner_df, sentiment_analyzer)
     
-    print('Returning {} sentences with clear player name'.format(sentiment_df.shape[0]))
+    print('Returning {} sentences with sentiment and extracted entities'.format(sentiment_df.shape[0]))
 
     return ner_df, sentiment_df
 
