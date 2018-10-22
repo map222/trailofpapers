@@ -44,7 +44,7 @@ def create_sentiment_df(comment_df_loc: str, sentiment_analyzer:Callable,
     comment_df['text_length'] = comment_df['text'].str.len()
     print('Loaded {} comments'.format(comment_df.shape[0]))
     
-    min_length = 20
+    min_length = 15
     max_length = 500
     print('Filtering to comments with text_length > {} and text_length < {}'.format(min_length, max_length) )
     comment_df = comment_df.query('text_length > {} and text_length < {}'.format(min_length, max_length) )
@@ -89,7 +89,8 @@ def chunk_comments_sentences(comment_df: pd.DataFrame, text_col = 'text'):
     
     print('Chunked into {} sentences'.format(sentences_df.shape[0]))
     return (comment_df.join(sentences_df)
-                      .drop(columns = [text_col]) )
+                      .drop(columns = [text_col])
+                      .dropna(subset = ['sentences']) )
 
 def extract_unknown_ner(sentences_df, SENTENCES_COL = 'sentences', NER_COL = 'named_entities', ner_port = 9199):
     ''' Extracted named entities using Stanford's NER.
@@ -125,13 +126,14 @@ def extract_known_ner(sentences_df: pd.DataFrame, NER_SET, UPPER_SET = {'Love', 
         ner_set: set of lower-cased named entities
     '''
     # First do an extraction for Love, Smart, etc.
-    upper_filter = lambda sentence: list(filter(lambda word: word.strip(string.punctuation).strip("'s'") in UPPER_SET, sentence.split() ))
+    clean_word = lambda word: word.strip(string.punctuation).replace("'s", '') 
+    upper_filter = lambda sentence: [clean_word(word) for word in sentence.split() if clean_word(word) in UPPER_SET]
     sentences_df[UPPER_COL] = sentences_df[SENTENCES_COL].apply(upper_filter)
     
     sentences_df[SENTENCES_COL] = sentences_df[SENTENCES_COL].str.lower()
     
     # tokenize sentence with split, and use filter to find named entities
-    ner_filter = lambda sentence: list(filter(lambda word: word.strip(string.punctuation).strip("'s'") in NER_SET, sentence.split() ))
+    ner_filter = lambda sentence: [clean_word(word) for word in sentence.split() if clean_word(word) in NER_SET]
     sentences_df[NER_COL] = sentences_df[SENTENCES_COL].apply(ner_filter)
     
     sentences_df[NER_COL] = sentences_df.apply(lambda row: row[NER_COL] + [word.lower() for word in row[UPPER_COL]], axis=1)
@@ -157,7 +159,7 @@ def clean_entities(sentences_df, NER_COL = 'named_entities', STR_COL = 'str_enti
     # filter out rows with non-unique entities, then remove known non-player entities, and ensure there still is one
     sentences_df = sentences_df[sentences_df[NER_COL].str.len() > 0] # only care if we can find entity
     sentences_df = sentences_df[sentences_df[NER_COL].str.len() <3]
-    sentences_df[NER_COL] = sentences_df[NER_COL].apply(lambda entities: [entity for entity in entities if entity not in non_players_set])
+    sentences_df[NER_COL] = sentences_df[NER_COL].apply(lambda row: [] if any([entity in non_players_set for entity in row]) else row)
     sentences_df = sentences_df[sentences_df[NER_COL].str.len() > 0] # only care if we can find entity
     
     sentences_df[STR_COL] = sentences_df[NER_COL].apply(lambda entities: ' '.join(entities))
@@ -182,7 +184,7 @@ def calculate_sentiment(sentences_df:pd.DataFrame, sentiment_analyzer: Callable,
     
     return sentences_df
 
-def fuzzy_match_players( sentiment_df: pd.DataFrame, UNIQUE_NAMES: set, STR_COL = 'str_entities'):
+def fuzzy_match_players( sentiment_df: pd.DataFrame, UNIQUE_NAMES: set, STR_COL = 'str_entities', num_workers = 8):
     ''' Given a dataframe with a list of entities as a string, return the closest fuzzy match.
         This works by taking all unique entities in the dataframe, and find the fuzzy match for it.
         Then merge these fuzzy matches back onto the original dataframe.
@@ -195,7 +197,6 @@ def fuzzy_match_players( sentiment_df: pd.DataFrame, UNIQUE_NAMES: set, STR_COL 
     '''
 
     # dask parameters
-    num_workers = 8
     num_partitions = int(2* num_workers - 1)
 
     print('Fuzzy matching player names')

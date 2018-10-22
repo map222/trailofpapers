@@ -3,6 +3,7 @@ import requests
 import time
 import string
 import pandas as pd
+import numpy as np
 from bs4 import BeautifulSoup
 
 def get_year_performance_nba( year: int):
@@ -144,25 +145,41 @@ def download_nfl_player_stubs():
                         columns=['Player', 'url', 'position', 'start_year', 'end_year'])
               .convert_objects(convert_numeric=True))
 
-def get_pro_football_profile(player_url):
+def get_pro_football_profile(df):
     ''' Get player profile from pro-football-reference
 
-    player_url: end of url for the playe (e.g. "/player/A/XYZ01.htm")
+    df: 1-row dataframe with a column 'url' that has the end of url for the player (e.g. "/player/A/XYZ01.htm")
     '''
+    
+    player_url = df.iloc[0]['url']
     base_url = 'https://www.pro-football-reference.com'
     player_html = str(requests.get(base_url + player_url).content)
     chowder = BeautifulSoup(player_html, 'html.parser')
     
     try:
+        # get the list of teams and years the player was activate (needed for joins)
+        demo_df = pd.read_html(base_url + player_url)[-1].iloc[:, [0,2]].dropna()
+        demo_df.columns = ['year', 'Tm']
+        if demo_df['year'].dtype == np.object_:
+            demo_df['year'] = demo_df['year'].str.strip(string.punctuation).astype(int)
+        demo_df = demo_df.query('Tm != "2TM" and Tm != "3TM"')
+
+        # fill in other values
+        for col in ['position', 'start_year', 'end_year', 'url']:
+            demo_df[col] = df.iloc[0][col]
+
+        # get demographic info
         height = chowder.find(itemprop='height').text
-        height = int(height.split('-')[0])*12 + int(height.split('-')[1])
-        weight = chowder.find(itemprop='weight').text.replace('lb', '')
+        demo_df['height'] = int(height.split('-')[0])*12 + int(height.split('-')[1])
+        demo_df['weight'] = chowder.find(itemprop='weight').text.replace('lb', '')
         birth_date = chowder.find(itemprop='birthDate').text
-        birth_date = birth_date.replace('\\n', '').replace('\\t', '').replace('\xa0', ' ').strip()
-        time.sleep(0.2)
+        demo_df['birth_date'] = birth_date.replace('\\n', '').replace('\\t', '').replace('\xa0', ' ').strip()
+        time.sleep(0.1)
     except:
-        return 0, 0, 'May 25, 1700'
-    return height, weight, birth_date
+        return pd.DataFrame([[0, 'NoTeam', '', 0, 0, '', 0, 0, '']],
+                             columns = ['year', 'Tm', 'position', 'start_year',
+                                        'end_year','url', 'height', 'weight', 'birth_date'])
+    return demo_df
 
 def get_category_players_wiki(category = 'Category:African-American_players_of_American_football'):
     """Get list of players in a category from Wikipedia
