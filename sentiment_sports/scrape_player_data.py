@@ -42,7 +42,8 @@ def get_year_performance_nba( year: int):
                                           'TRB%':'TRBP',
                                           'AST%':'ASTP',
                                           'BLK%':'BLKP',
-                                          'STL%':'STLP' }))
+                                          'STL%':'STLP',
+                                          'TOV%':'TOVP'}))
 
 def get_player_team_nba(year: int):
     ''' Create a DF of which team each player played the most on (important for players who get traded)
