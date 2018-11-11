@@ -117,3 +117,4 @@ venv.bak/
 dmypy.json
 /.vs/VSWorkspaceState.json
 /.vs/slnx.sqlite
+/sentiment_sports/nba_regressions.ipynb
