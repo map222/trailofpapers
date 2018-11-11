@@ -207,3 +207,78 @@ def get_category_players_wiki(category = 'Category:African-American_players_of_A
     player_df['Player'] = player_df['Player'].str.split('(').str[0].str.strip()
     player_df['Player'] = player_df['Player'].str.lower()
     return player_df[['Player']]
+
+def scrape_nba_coaches() -> pd.DataFrame:
+    ''' Download information on NBA coaches from basketball-referene.com
+    '''
+
+    coaches_url = f'https://www.basketball-reference.com/coaches/NBA_stats.html'
+#        coach_url = f'https://www.basketball-reference.com/coaches/adelmri01c.html'
+
+    coaches_df = pd.read_html(coaches_url)[0].iloc[:, [1, 4, 5, 6, 7, 8]]
+    coaches_df.columns = ['Coach', 'Yrs', 'G', 'total_W', 'total_L', 'total_WinP']
+    coaches_df = coaches_df.dropna(subset = ['G']).query('Coach != "Coach"') # elide table labels
+
+    def scrape_nba_coach(coach_name):
+        coach_name = coach_name.lower().replace('.', '').replace("'", '').strip(string.punctuation)
+        # scrape a single coach
+        coach_abbreviation = ''.join(coach_name.split()[1:])[:5] + \
+                             coach_name.split()[0][:2]
+        try:
+            coach_url = f'https://www.basketball-reference.com/coaches/{coach_abbreviation}01c.html'
+            coach_df = pd.read_html(coach_url)[0].iloc[:, 0:8] 
+        except: # for reasons I don't understand, you can have an 01c or 02c
+            try:
+                coach_url = f'https://www.basketball-reference.com/coaches/{coach_abbreviation}99c.html'
+                coach_df = pd.read_html(coach_url)[0].iloc[:, 0:8] 
+            except:
+                print('Could not load URL ' + coach_url)
+                return None 
+
+        coach_df.columns = ['season', 'age', 'league', 'Tm', 'G', 'W', 'L', 'season_WinP']
+        coach_df['career_WinP'] = coach_df.iloc[-1]['season_WinP']
+        coach_df = coach_df.iloc[:-1] # cut off last row, which has career data
+        coach_df['season'] = coach_df['season'].str[:4].astype(int)
+        coach_df = coach_df.dropna(subset = ['W']) # these rows are assistant years
+        coach_df['G'] = coach_df['G'].astype(int)
+        coach_df['Coach'] = coach_name
+        return coach_df
+
+    output_df = pd.concat(coaches_df['Coach'].apply(scrape_nba_coach).values)
+    return output_df
+
+
+def scrape_nfl_coaches() -> pd.DataFrame:
+    ''' Download information on NFL coaches from pro-football-referene.com
+    '''
+
+    coaches_url = f'https://www.pro-football-reference.com/coaches/'
+    # coach_url = 'https://www.pro-football-reference.com/coaches/BeliBi0.htm
+
+    coaches_df = pd.read_html(coaches_url)[0]
+    coaches_df = coaches_df.dropna(subset = ['G']).query('Coach != "Coach"') # elide table labels
+    coaches_df['Coach'] = coaches_df['Coach'].str.strip(string.punctuation)
+
+    def scrape_nba_coach(coach_name):
+        coach_name = coach_name.replace('.', '').replace("'", '')
+        # scrape a single coach; ljust is because last name must have 4 characters
+        coach_abbreviation = ''.join(coach_name.split()[1:])[:4].ljust(4, 'x') + \
+                             coach_name.split()[0][:2]
+        coach_url = f'https://www.pro-football-reference.com/coaches/{coach_abbreviation}0.htm'
+        try:
+            coach_df = pd.read_html(coach_url)[0].iloc[:, 0:9] 
+        except:
+            print('Could not load URL ' + coach_url)
+            return None
+
+        coach_df.columns = ['year', 'age', 'Tm', 'league', 'G', 'W', 'L', 'Tie', 'season_WinP']
+        coach_df = coach_df.dropna(subset = ['year']) # these rows are assistant years
+        coach_df['career_WinP'] = coach_df.iloc[-1]['Tie']
+        coach_df = coach_df.iloc[:-1] # cut off last row, which has career data
+        coach_df['year'] = coach_df['year'].str[:4].astype(int)
+        coach_df['G'] = coach_df['G'].astype(int)
+        coach_df['Coach'] = coach_name
+        return coach_df
+
+    output_df = pd.concat(coaches_df['Coach'].apply(scrape_nba_coach).values)
+    return output_df
