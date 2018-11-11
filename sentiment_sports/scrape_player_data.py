@@ -219,33 +219,37 @@ def scrape_nba_coaches() -> pd.DataFrame:
     coaches_df.columns = ['Coach', 'Yrs', 'G', 'total_W', 'total_L', 'total_WinP']
     coaches_df = coaches_df.dropna(subset = ['G']).query('Coach != "Coach"') # elide table labels
 
-    def scrape_nba_coach(coach_name):
-        coach_name = coach_name.lower().replace('.', '').replace("'", '').strip(string.punctuation)
-        # scrape a single coach
-        coach_abbreviation = ''.join(coach_name.split()[1:])[:5] + \
-                             coach_name.split()[0][:2]
+    output_df = pd.concat(coaches_df['Coach'].apply(scrape_nba_coach).values)
+    return output_df
+
+def scrape_nba_coach(coach_name):
+    ''' Load and parse table for a single coach
+        returns: pandas Dataframe where each row is one year of performance
+    '''
+    coach_name = coach_name.lower().replace('.', '').replace("'", '').strip(string.punctuation)
+    # scrape a single coach
+    coach_abbreviation = ''.join(coach_name.split()[1:])[:5] + \
+                            coach_name.split()[0][:2]
+    try:
+        coach_url = f'https://www.basketball-reference.com/coaches/{coach_abbreviation}99c.html'
+        coach_df = pd.read_html(coach_url)[0].iloc[:, 0:8] 
+    except: # for reasons I don't understand, you can have an 01c or 02c
         try:
             coach_url = f'https://www.basketball-reference.com/coaches/{coach_abbreviation}01c.html'
             coach_df = pd.read_html(coach_url)[0].iloc[:, 0:8] 
-        except: # for reasons I don't understand, you can have an 01c or 02c
-            try:
-                coach_url = f'https://www.basketball-reference.com/coaches/{coach_abbreviation}99c.html'
-                coach_df = pd.read_html(coach_url)[0].iloc[:, 0:8] 
-            except:
-                print('Could not load URL ' + coach_url)
-                return None 
+        except:
+            print('Could not load URL ' + coach_url)
+            return None 
 
-        coach_df.columns = ['season', 'age', 'league', 'Tm', 'G', 'W', 'L', 'season_WinP']
-        coach_df['career_WinP'] = coach_df.iloc[-1]['season_WinP']
-        coach_df = coach_df.iloc[:-1] # cut off last row, which has career data
-        coach_df['season'] = coach_df['season'].str[:4].astype(int)
-        coach_df = coach_df.dropna(subset = ['W']) # these rows are assistant years
-        coach_df['G'] = coach_df['G'].astype(int)
-        coach_df['Coach'] = coach_name
-        return coach_df
-
-    output_df = pd.concat(coaches_df['Coach'].apply(scrape_nba_coach).values)
-    return output_df
+    print('Loaded coach: ' + coach_name)
+    coach_df.columns = ['season', 'age', 'league', 'Tm', 'G', 'W', 'L', 'season_WinP']
+    coach_df['career_WinP'] = coach_df.iloc[-1]['season_WinP']
+    coach_df = coach_df.iloc[:-1] # cut off last row, which has career data
+    coach_df['season'] = coach_df['season'].str[:4].astype(int)
+    coach_df = coach_df.dropna(subset = ['W']) # these rows are assistant years
+    coach_df['G'] = coach_df['G'].astype(int)
+    coach_df['Coach'] = coach_name
+    return coach_df
 
 
 def scrape_nfl_coaches() -> pd.DataFrame:
