@@ -21,7 +21,7 @@ def get_month_pushshift( year, month, day, subreddit = 'nba'):
     '''
 
     # to get more comments, I query for each hour of the day; this code convers days into timestamps
-    data_col = ['text', 'timestamp', 'user', 'flair', 'score']
+    data_col = ['text', 'timestamp', 'user', 'flair', 'score', 'id', 'link_id', 'parent_id']
     start_after = datetime.now() - datetime(year,month,1)
     end_before = datetime.now() - datetime(year,month,day)
     start_hour = start_after.days * 24 + start_after.seconds  // 3600
@@ -30,7 +30,7 @@ def get_month_pushshift( year, month, day, subreddit = 'nba'):
     # setup for the http request
     url_params = {'subreddit': subreddit,
                   'size':500}#,
-#                  'fields': ','.join( ['author','author_flair_text','body','created_utc'])}
+#                  'fields': ','.join( ['author','author_flair_text','body','created_utc', 'id'])}
     submission_url = 'https://api.pushshift.io/reddit/search/submission/'
 
     # initialize list of submissions
@@ -76,20 +76,22 @@ def parse_submission_pushshift( submission):
 
         return: tuple of fields
     '''
-    selftext = ''
-    if 'selftext' in submission and 'author" in ':
+    try:
         selftext = submission['selftext']
-    text = submission['title'] + '. ' + selftext
-    creation_date = submission['created_utc']
-    author = submission['author'] #.name for PRAW
-    flair = submission['author_flair_text']
-    score = submission['score']
-    return (text, creation_date, author, flair, score)
+        text = submission['title'] + '. ' + selftext
+        creation_date = submission['created_utc']
+        author = submission['author'] #.name for PRAW
+        flair = submission['author_flair_text']
+        score = submission['score']
+        thread_id = submission['id']
+        return (text, creation_date, author, flair, score, thread_id, thread_id, thread_id)
+    except:
+        return ('', 1, '', '', -1000, '', '', '')
 
 def parse_comment_pushshift( comment):
     ''' Convert comment dictionary into a tuple
     '''
-    fields = ['body', 'created_utc', 'author', 'author_flair_text', 'score']
+    fields = ['body', 'created_utc', 'author', 'author_flair_text', 'score', 'id', 'link_id', 'parent_id']
     if all( [field in comment for field in fields]):
         return [comment[x] for x in fields]
-    return ('', 1, '', '', -1000)
+    return ('', 1, '', '', -1000, '', '', '')
