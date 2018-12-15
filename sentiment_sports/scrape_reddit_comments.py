@@ -20,13 +20,13 @@ def get_month_pushshift( year, month, day, subreddit = 'nba'):
             3. the raw comments
     '''
 
-    # to get more comments, I query for each hour of the day; this code convers days into timestamps
+    # to get more comments, I query for each hour of the day; this code converts days into timestamps
     data_col = ['text', 'timestamp', 'user', 'flair', 'score', 'id', 'link_id', 'parent_id']
     start_after = datetime.now() - datetime(year,month,1)
     end_before = datetime.now() - datetime(year,month,day)
     start_hour = start_after.days * 24 + start_after.seconds  // 3600
     end_hour = end_before.days * 24 + end_before.seconds  // 3600 - 1 
-    
+
     # setup for the http request
     url_params = {'subreddit': subreddit,
                   'size':500}#,
@@ -35,7 +35,7 @@ def get_month_pushshift( year, month, day, subreddit = 'nba'):
 
     # initialize list of submissions
     month_submissions = []
-    
+
     # run data request for "submissions" (original post)
     print('Downloading submissions for {}-{}'.format(year, month))
     hour_step = 6
@@ -43,15 +43,15 @@ def get_month_pushshift( year, month, day, subreddit = 'nba'):
         url_params.update({'before': str(hour)+'h', 'after': str(hour+hour_step) + 'h'})
         month_submissions.extend(json.loads(requests.get(submission_url, params=url_params).text)['data'])
         time.sleep(0.5)
-    
+
     print('Downloaded {} submissions'.format(len(month_submissions)))
-    
+
     # after downloading, parse the JSON into a dataframe
     ops = [ parse_submission_pushshift(submission) for submission in month_submissions]
     submission_df =(pd.DataFrame(ops, columns=data_col)
                       .assign(source = lambda x: 'submission') )
     print('Made dataframe of shape {}'.format(submission_df.shape) )
-    
+
     # download comments (replies to posts)
     print('Downloading comments')
     comment_url = 'https://api.pushshift.io/reddit/search/comment/'
@@ -74,7 +74,7 @@ def get_month_pushshift( year, month, day, subreddit = 'nba'):
 def parse_submission_pushshift( submission):
     ''' Pull out the important fields from a submission
 
-        return: tuple of fields
+        return: tuple of fields 
     '''
     try:
         selftext = submission['selftext']

@@ -263,7 +263,7 @@ def scrape_nfl_coaches() -> pd.DataFrame:
     coaches_df = coaches_df.dropna(subset = ['G']).query('Coach != "Coach"') # elide table labels
     coaches_df['Coach'] = coaches_df['Coach'].str.strip(string.punctuation)
 
-    def scrape_nba_coach(coach_name):
+    def scrape_nfl_coach(coach_name):
         coach_name = coach_name.replace('.', '').replace("'", '')
         # scrape a single coach; ljust is because last name must have 4 characters
         coach_abbreviation = ''.join(coach_name.split()[1:])[:4].ljust(4, 'x') + \
@@ -284,5 +284,5 @@ def scrape_nfl_coaches() -> pd.DataFrame:
         coach_df['Coach'] = coach_name
         return coach_df
 
-    output_df = pd.concat(coaches_df['Coach'].apply(scrape_nba_coach).values)
+    output_df = pd.concat(coaches_df['Coach'].apply(scrape_nfl_coach).values)
     return output_df
