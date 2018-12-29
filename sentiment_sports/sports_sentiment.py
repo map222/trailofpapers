@@ -77,8 +77,8 @@ def chunk_comments_sentences(comment_df: pd.DataFrame, text_col = 'text'):
     
     # actual chunking
     print('Chunking into sentences')
-    sentences_df = (pd.DataFrame(comment_df[text_col].apply(sent_tokenize).tolist(), index=comment_df.index)
-                      .stack() )
+    sentences_df = (comment_df['comment'].apply(lambda row: pd.Series(sent_tokenize(row)))
+                                         .stack())
     
     # rename stuff
     sentences_df = (sentences_df.reset_index()
