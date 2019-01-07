@@ -131,15 +131,15 @@ def extract_known_ner(sentences_df: pd.DataFrame, NER_SET, UPPER_SET = {'Love', 
     clean_word = lambda word: word.strip(string.punctuation).replace("'s", '') 
     upper_filter = lambda sentence: [clean_word(word) for word in sentence.split() if clean_word(word) in UPPER_SET]
     sentences_df[UPPER_COL] = sentences_df[TEXT_COL].apply(upper_filter)
-    
+
     sentences_df[TEXT_COL] = sentences_df[TEXT_COL].str.lower()
-    
+
     # tokenize sentence with split, and use filter to find named entities
     ner_filter = lambda sentence: [clean_word(word) for word in sentence.split() if clean_word(word) in NER_SET]
     sentences_df[NER_COL] = sentences_df[TEXT_COL].apply(ner_filter)
-    
+
     sentences_df[NER_COL] = sentences_df.apply(lambda row: row[NER_COL] + [word.lower() for word in row[UPPER_COL]], axis=1)
-    
+
     return sentences_df
 
 def clean_entities(sentences_df, NER_COL = 'named_entities', STR_COL = 'str_entities', non_players_set = {}):
