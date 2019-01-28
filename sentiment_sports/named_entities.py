@@ -1,6 +1,6 @@
-NICKNAMES_OLDTIMERS = set('lma kd lbj klove drose kobe mj magic'\
-                          'bird wilt chamberlain tt shump kat melo'\
-                          'k-love d-wade dwade boogie bosh iggy mcbuckets'\
+NICKNAMES_OLDTIMERS = set('lma kd lbj klove drose kobe mj magic '\
+                          'bird wilt chamberlain tt shump kat melo steph '\
+                          'k-love d-wade dwade boogie bosh iggy mcbuckets '\
                           'cp3 shaq dray hakeem kareem zo lamar odom delly chuck barkley'.lower().split())
 TEAMS = set('Atlanta Hawks Boston Celtics Brooklyn Nets Charlotte Bobcats ' \
                   'Chicago Bulls Cleveland Cavaliers cavs Dallas Mavericks mavs Denver Nuggets ' \
