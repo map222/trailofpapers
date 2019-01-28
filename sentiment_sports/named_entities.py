@@ -12,7 +12,7 @@ TEAMS = set('Atlanta Hawks Boston Celtics Brooklyn Nets Charlotte Bobcats ' \
                   'San Antonio Spurs Toronto Raptors Utah Jazz Washington Wizards wiz '\
                   'NBA asg'.lower().split() )
 NON_PLAYERS = TEAMS.union(set('KOC woj shams ainge'.lower().split()) )
-UPPER_ENTITIES = {'Black', 'Ball' 'Buddy', 'Grant', 'House', 'Smart', 'Holiday', 'Love', 'Rose',
+UPPER_ENTITIES = {'Black', 'Ball' 'Buddy', 'Grant', 'House', 'Smart', 'Holiday', 'Love', 'Rose', 'Coty',
                   'Smart', 'Stone', 'Temple', 'Wall', 'Will', 'Wear', 'Case', 'New', 'Little',
                   'Shorts', 'City', 'Will', 'Young', 'Gay', 'Price', 'World', 'Peace', 'Long', 'Semi',
                   'Brown', 'Green', 'Blue', 'White', 'Brand', 'Early'}
