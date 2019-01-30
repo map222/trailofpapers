@@ -24,8 +24,8 @@ def get_month_pushshift( year, month, day, subreddit = 'nba'):
     data_col = ['text', 'timestamp', 'user', 'flair', 'score', 'id', 'link_id', 'parent_id']
     start_after = datetime.now() - datetime(year,month,1)
     end_before = datetime.now() - datetime(year,month,day)
-    start_hour = start_after.days * 24 + start_after.seconds  // 3600
-    end_hour = end_before.days * 24 + end_before.seconds  // 3600 - 1 
+    start_hour = start_after.total_seconds()  // 3600
+    end_hour = end_before.total_seconds()  // 3600 - 1
 
     # setup for the http request
     url_params = {'subreddit': subreddit,
