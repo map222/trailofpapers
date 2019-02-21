@@ -115,5 +115,6 @@ venv.bak/
 .mypy_cache/
 .dmypy.json
 dmypy.json
-/.vs/slnx.sqlite-journal
+/.vs/VSWorkspaceState.json
 /.vs/slnx.sqlite
+/sentiment_sports/nba_regressions.ipynb

@@ -3,6 +3,7 @@ import requests
 import time
 import string
 import pandas as pd
+import numpy as np
 from bs4 import BeautifulSoup
 
 def get_year_performance_nba( year: int):
@@ -41,7 +42,8 @@ def get_year_performance_nba( year: int):
                                           'TRB%':'TRBP',
                                           'AST%':'ASTP',
                                           'BLK%':'BLKP',
-                                          'STL%':'STLP' }))
+                                          'STL%':'STLP',
+                                          'TOV%':'TOVP'}))
 
 def get_player_team_nba(year: int):
     ''' Create a DF of which team each player played the most on (important for players who get traded)
@@ -144,25 +146,41 @@ def download_nfl_player_stubs():
                         columns=['Player', 'url', 'position', 'start_year', 'end_year'])
               .convert_objects(convert_numeric=True))
 
-def get_pro_football_profile(player_url):
+def get_pro_football_profile(df):
     ''' Get player profile from pro-football-reference
 
-    player_url: end of url for the playe (e.g. "/player/A/XYZ01.htm")
+    df: 1-row dataframe with a column 'url' that has the end of url for the player (e.g. "/player/A/XYZ01.htm")
     '''
+    
+    player_url = df.iloc[0]['url']
     base_url = 'https://www.pro-football-reference.com'
     player_html = str(requests.get(base_url + player_url).content)
     chowder = BeautifulSoup(player_html, 'html.parser')
     
     try:
+        # get the list of teams and years the player was activate (needed for joins)
+        demo_df = pd.read_html(base_url + player_url)[-1].iloc[:, [0,2]].dropna()
+        demo_df.columns = ['year', 'Tm']
+        if demo_df['year'].dtype == np.object_:
+            demo_df['year'] = demo_df['year'].str.strip(string.punctuation).astype(int)
+        demo_df = demo_df.query('Tm != "2TM" and Tm != "3TM"')
+
+        # fill in other values
+        for col in ['position', 'start_year', 'end_year', 'url']:
+            demo_df[col] = df.iloc[0][col]
+
+        # get demographic info
         height = chowder.find(itemprop='height').text
-        height = int(height.split('-')[0])*12 + int(height.split('-')[1])
-        weight = chowder.find(itemprop='weight').text.replace('lb', '')
+        demo_df['height'] = int(height.split('-')[0])*12 + int(height.split('-')[1])
+        demo_df['weight'] = chowder.find(itemprop='weight').text.replace('lb', '')
         birth_date = chowder.find(itemprop='birthDate').text
-        birth_date = birth_date.replace('\\n', '').replace('\\t', '').replace('\xa0', ' ').strip()
-        time.sleep(0.2)
+        demo_df['birth_date'] = birth_date.replace('\\n', '').replace('\\t', '').replace('\xa0', ' ').strip()
+        time.sleep(0.1)
     except:
-        return 0, 0, 'May 25, 1700'
-    return height, weight, birth_date
+        return pd.DataFrame([[0, 'NoTeam', '', 0, 0, '', 0, 0, '']],
+                             columns = ['year', 'Tm', 'position', 'start_year',
+                                        'end_year','url', 'height', 'weight', 'birth_date'])
+    return demo_df
 
 def get_category_players_wiki(category = 'Category:African-American_players_of_American_football'):
     """Get list of players in a category from Wikipedia
@@ -189,3 +207,82 @@ def get_category_players_wiki(category = 'Category:African-American_players_of_A
     player_df['Player'] = player_df['Player'].str.split('(').str[0].str.strip()
     player_df['Player'] = player_df['Player'].str.lower()
     return player_df[['Player']]
+
+def scrape_nba_coaches() -> pd.DataFrame:
+    ''' Download information on NBA coaches from basketball-referene.com
+    '''
+
+    coaches_url = f'https://www.basketball-reference.com/coaches/NBA_stats.html'
+#        coach_url = f'https://www.basketball-reference.com/coaches/adelmri01c.html'
+
+    coaches_df = pd.read_html(coaches_url)[0].iloc[:, [1, 4, 5, 6, 7, 8]]
+    coaches_df.columns = ['Coach', 'Yrs', 'G', 'total_W', 'total_L', 'total_WinP']
+    coaches_df = coaches_df.dropna(subset = ['G']).query('Coach != "Coach"') # elide table labels
+
+    output_df = pd.concat(coaches_df['Coach'].apply(scrape_nba_coach).values)
+    return output_df
+
+def scrape_nba_coach(coach_name):
+    ''' Load and parse table for a single coach
+        returns: pandas Dataframe where each row is one year of performance
+    '''
+    coach_name = coach_name.lower().replace('.', '').replace("'", '').strip(string.punctuation)
+    # scrape a single coach
+    coach_abbreviation = ''.join(coach_name.split()[1:])[:5] + \
+                            coach_name.split()[0][:2]
+    try:
+        coach_url = f'https://www.basketball-reference.com/coaches/{coach_abbreviation}99c.html'
+        coach_df = pd.read_html(coach_url)[0].iloc[:, 0:8] 
+    except: # for reasons I don't understand, you can have an 01c or 02c
+        try:
+            coach_url = f'https://www.basketball-reference.com/coaches/{coach_abbreviation}01c.html'
+            coach_df = pd.read_html(coach_url)[0].iloc[:, 0:8] 
+        except:
+            print('Could not load URL ' + coach_url)
+            return None 
+
+    print('Loaded coach: ' + coach_name)
+    coach_df.columns = ['season', 'age', 'league', 'Tm', 'G', 'W', 'L', 'season_WinP']
+    coach_df['career_WinP'] = coach_df.iloc[-1]['season_WinP']
+    coach_df = coach_df.iloc[:-1] # cut off last row, which has career data
+    coach_df['season'] = coach_df['season'].str[:4].astype(int)
+    coach_df = coach_df.dropna(subset = ['W']) # these rows are assistant years
+    coach_df['G'] = coach_df['G'].astype(int)
+    coach_df['Coach'] = coach_name
+    return coach_df
+
+
+def scrape_nfl_coaches() -> pd.DataFrame:
+    ''' Download information on NFL coaches from pro-football-referene.com
+    '''
+
+    coaches_url = f'https://www.pro-football-reference.com/coaches/'
+    # coach_url = 'https://www.pro-football-reference.com/coaches/BeliBi0.htm
+
+    coaches_df = pd.read_html(coaches_url)[0]
+    coaches_df = coaches_df.dropna(subset = ['G']).query('Coach != "Coach"') # elide table labels
+    coaches_df['Coach'] = coaches_df['Coach'].str.strip(string.punctuation)
+
+    def scrape_nfl_coach(coach_name):
+        coach_name = coach_name.replace('.', '').replace("'", '')
+        # scrape a single coach; ljust is because last name must have 4 characters
+        coach_abbreviation = ''.join(coach_name.split()[1:])[:4].ljust(4, 'x') + \
+                             coach_name.split()[0][:2]
+        coach_url = f'https://www.pro-football-reference.com/coaches/{coach_abbreviation}0.htm'
+        try:
+            coach_df = pd.read_html(coach_url)[0].iloc[:, 0:9] 
+        except:
+            print('Could not load URL ' + coach_url)
+            return None
+
+        coach_df.columns = ['year', 'age', 'Tm', 'league', 'G', 'W', 'L', 'Tie', 'season_WinP']
+        coach_df = coach_df.dropna(subset = ['year']) # these rows are assistant years
+        coach_df['career_WinP'] = coach_df.iloc[-1]['Tie']
+        coach_df = coach_df.iloc[:-1] # cut off last row, which has career data
+        coach_df['year'] = coach_df['year'].str[:4].astype(int)
+        coach_df['G'] = coach_df['G'].astype(int)
+        coach_df['Coach'] = coach_name
+        return coach_df
+
+    output_df = pd.concat(coaches_df['Coach'].apply(scrape_nfl_coach).values)
+    return output_df
