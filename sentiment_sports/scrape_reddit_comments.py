@@ -24,8 +24,8 @@ def get_month_pushshift( year, month, day, subreddit = 'nba'):
     data_col = ['text', 'timestamp', 'user', 'flair', 'score', 'id', 'link_id', 'parent_id']
     start_after = datetime.now() - datetime(year,month,1)
     end_before = datetime.now() - datetime(year,month,day)
-    start_hour = start_after.total_seconds()  // 3600
-    end_hour = end_before.total_seconds()  // 3600 - 1
+    start_hour = int(start_after.total_seconds())  // 3600
+    end_hour = int(end_before.total_seconds())  // 3600 - 1
 
     # setup for the http request
     url_params = {'subreddit': subreddit,
@@ -36,14 +36,20 @@ def get_month_pushshift( year, month, day, subreddit = 'nba'):
     # initialize list of submissions
     month_submissions = []
 
+    def download_range(start_hour, end_hour, hour_step, url, url_params):
+        output = []
+        for hour in range(start_hour, end_hour, -hour_step):
+            try:
+                url_params.update({'before': str(hour)+'h', 'after': str(hour+hour_step) + 'h'})
+                output.extend(json.loads(requests.get(url, params=url_params).text)['data'])
+            except:
+                print(f'Had problem parsing hour {start_hour} for url {url}')
+            time.sleep(0.5)
+        return output
+    
     # run data request for "submissions" (original post)
     print('Downloading submissions for {}-{}'.format(year, month))
-    hour_step = 6
-    for hour in range(start_hour, end_hour, -hour_step):
-        url_params.update({'before': str(hour)+'h', 'after': str(hour+hour_step) + 'h'})
-        month_submissions.extend(json.loads(requests.get(submission_url, params=url_params).text)['data'])
-        time.sleep(0.5)
-
+    month_submissions = download_range(start_hour, end_hour, 6, submission_url, url_params)
     print('Downloaded {} submissions'.format(len(month_submissions)))
 
     # after downloading, parse the JSON into a dataframe
@@ -55,12 +61,7 @@ def get_month_pushshift( year, month, day, subreddit = 'nba'):
     # download comments (replies to posts)
     print('Downloading comments')
     comment_url = 'https://api.pushshift.io/reddit/search/comment/'
-    comments = []
-    hour_step = 1
-    for hour in range(start_hour, end_hour, -hour_step):
-        url_params.update({'before': str(hour)+'h', 'after': str(hour+hour_step) + 'h'})
-        comments.extend(json.loads(requests.get(comment_url, params=url_params).text)['data'])
-        time.sleep(0.5)
+    comments = download_range(start_hour, end_hour, 1, comment_url, url_params)
     print('Downloaded {} comments'.format(len(comments) ) )
 
     # convert the JSONs into a dataframe
