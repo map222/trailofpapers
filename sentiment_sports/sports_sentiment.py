@@ -273,6 +273,7 @@ def extract_skins_fortnite(df_loc: str, ENTITY_SET: set, NON_SKIN_SET: set, sent
     single_skin_df = single_skin_df[single_skin_df[ENTITY_COL].str.len() ==1]
     single_skin_df = calculate_sentiment(single_skin_df, sentiment_analyzer, SENTENCE_COL)
     extracted_df.loc[:,ENTITY_COL] = extracted_df[ENTITY_COL].apply(lambda row: [entity for entity in row if entity not in NON_SKIN_SET])
+    extracted_df = extracted_df[extracted_df[ENTITY_COL].str.len() > 0]
     return extracted_df, single_skin_df
 
 def extract_skin_ner(df, SKIN_SET, ENTITY_COL = 'extracted_skins', TEXT_COL = 'sentences'):
@@ -291,6 +292,7 @@ def extract_skin_ner(df, SKIN_SET, ENTITY_COL = 'extracted_skins', TEXT_COL = 's
     # This trigram dict will miss at least one skin that starts with same two words
     trigram_dict = {skin.split()[0]:{skin.split()[1]:skin.split()[2]} for skin in SKIN_SET if len(skin.split()) == 3}
 
+
     def get_skins_doc(doc, unigram, bigram, trigram):
         skins = []
         clean_word = lambda word: word.strip(string.punctuation).replace("'s", '')
@@ -301,15 +303,12 @@ def extract_skin_ner(df, SKIN_SET, ENTITY_COL = 'extracted_skins', TEXT_COL = 's
             if skip > 0:
                 skip-=1
                 continue
-            if token in trigram and i + 1 < len(tokens):
-                if tokens[i+1] in trigram[token] and i + 2 < len(tokens):
-                    if tokens[i+2] == trigram[token][tokens[i+1]]:
-                        skins.append(' '.join(tokens[i:i+3]))
-                        skip =2
-            elif token in bigram and i + 1 < len(tokens):
-                if tokens[i+1] in bigram[token]:
-                    skins.append(' '.join(tokens[i:i+2]))
-                    skip=1
+            if token in trigram and i + 2 < len(tokens) and tokens[i+1] in trigram[token] and tokens[i+2] == trigram[token][tokens[i+1]]:
+                skins.append(' '.join(tokens[i:i+3]))
+                skip =2
+            elif token in bigram and i + 1 < len(tokens) and tokens[i+1] in bigram[token]:
+                skins.append(' '.join(tokens[i:i+2]))
+                skip=1
             elif token in unigram:
                 skins.append(token)
         return list(set(skins))
