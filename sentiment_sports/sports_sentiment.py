@@ -2,12 +2,14 @@ import string
 import re
 import pandas as pd
 import dask.dataframe as dd
+from dask.distributed import Client, LocalCluster
 from ast import literal_eval
 from fuzzywuzzy import process as fuzzy_process
 from fuzzywuzzy import fuzz
 from sner import Ner
 from nltk import sent_tokenize
 from typing import Callable
+from collections import defaultdict
 
 def create_sentiment_df(comment_df_loc: str, sentiment_analyzer:Callable, 
                         ner_set = set(), non_players_set = {}, UPPER_NAMES = set(), TEXT_COL = 'sentences'):
@@ -61,10 +63,10 @@ def create_sentiment_df(comment_df_loc: str, sentiment_analyzer:Callable,
         
     print('Cleaning entities')
     ner_df = clean_entities(ner_df, non_players_set=non_players_set)
-        
+
     print('Calculating sentiment')
     sentiment_df = calculate_sentiment(ner_df, sentiment_analyzer, TEXT_COL)
-    
+
     print('Returning {} sentences with sentiment and extracted entities'.format(sentiment_df.shape[0]))
 
     return ner_df, sentiment_df
@@ -74,18 +76,27 @@ def chunk_comments_sentences(comment_df: pd.DataFrame, text_col = 'text'):
         comment_df: dataframe with a column for comments that need to be chunked
         text_col: column to be chunked
     '''
-    
     # actual chunking
     print('Chunking into sentences')
-    sentences_df = (comment_df[text_col].apply(lambda row: pd.Series(sent_tokenize(row)))
+    ddf = dd.from_pandas(comment_df, npartitions=12)
+    def tokenize_pandas_df(df):
+        return (df[text_col].apply(lambda row: pd.Series(sent_tokenize(row)))
                                          .stack())
+    cluster = LocalCluster(n_workers = 3)
+    client = Client(cluster)
+    sentences_df = ddf.map_partitions(tokenize_pandas_df  ).compute()
+    client.close()
+#    sentences_df = (comment_df[text_col].apply(lambda row: pd.Series(sent_tokenize(row)))
+#                                         .stack())
     
+    print('Reshaping and fixing whitespace / punctuation')
     # rename stuff
     sentences_df = (sentences_df.reset_index()
                       .set_index('level_0')
                       .rename(columns={0:'sentences'})
                       .drop(['level_1'], axis = 1))
-    sentences_df['sentences'] = sentences_df['sentences'].str.replace('\r|\n', ' ')
+    sentences_df['sentences'] = (sentences_df['sentences'].str.replace('\r|\n', ' ')
+                                                          .str.strip('.?!'))
     
     print('Chunked into {} sentences'.format(sentences_df.shape[0]))
     return (comment_df.join(sentences_df)
@@ -128,7 +139,7 @@ def extract_known_ner(sentences_df: pd.DataFrame, NER_SET, UPPER_SET = {'Love', 
         TEXT_COL / NER_COL / UPPER_COL: column with the input text; where to store extracted entities; column to store upper-name entities
     '''
     # First do an extraction for Love, Smart, etc.
-    clean_word = lambda word: word.strip(string.punctuation).replace("'s", '') 
+    clean_word = lambda word: word.strip(string.punctuation).replace("'s", '')
     upper_filter = lambda sentence: [clean_word(word) for word in sentence.split() if clean_word(word) in UPPER_SET]
     sentences_df[UPPER_COL] = sentences_df[TEXT_COL].apply(upper_filter)
 
@@ -142,7 +153,8 @@ def extract_known_ner(sentences_df: pd.DataFrame, NER_SET, UPPER_SET = {'Love', 
 
     return sentences_df
 
-def clean_entities(sentences_df, NER_COL = 'named_entities', STR_COL = 'str_entities', non_players_set = {}):
+def clean_entities(sentences_df, NER_COL = 'named_entities', STR_COL = 'str_entities',
+                   non_players_set = {}, max_entities = 3):
     ''' Clean up the entities by: 
         1. Lower casing and removing punctuation
         2. Removing known non-player entities (e.g. teams, NBA, Coaches)
@@ -160,7 +172,7 @@ def clean_entities(sentences_df, NER_COL = 'named_entities', STR_COL = 'str_enti
     
     # filter out rows with non-unique entities, then remove known non-player entities, and ensure there still is one
     sentences_df = sentences_df[sentences_df[NER_COL].str.len() > 0] # only care if we can find entity
-    sentences_df = sentences_df[sentences_df[NER_COL].str.len() <3]
+    sentences_df = sentences_df[sentences_df[NER_COL].str.len() <max_entities]
     sentences_df[NER_COL] = sentences_df[NER_COL].apply(lambda row: [] if any([entity in non_players_set for entity in row]) else row)
     sentences_df = sentences_df[sentences_df[NER_COL].str.len() > 0] # only care if we can find entity
     
@@ -226,3 +238,81 @@ def find_player( potential_name: str, unique_names:set ):
         return 'unclear'
     # there is only one similar name, or a clear top similar name
     return names[0][0]
+
+def extract_skins_fortnite(df_loc: str, ENTITY_SET: set, NON_SKIN_SET: set, sentiment_analyzer: Callable,
+                           ENTITY_COL = 'extracted_skins', SENTENCE_COL = 'sentences', start_filter='^Aim'):
+    ''' Main function that loads a month of fornite comments and:
+        1. Separates comments into sentences
+        2. Performs NER using pre-existing list of entities (skins)
+        3. Calculates sentiment for rows with a single entity
+
+    parameters:
+        df_loc: str for file location of gzipped player comments
+        ENTITY_SET: python set of skins, with full name (e.g. "renegade raider")
+        sentiment_analyzer: function that calculates sentiment for a string
+                -should return a dictionary
+
+    returns:
+        two pandas dataframes:
+        extracted_df: dataframe with just the entities extracted per sentence (could contain multiple skins)
+        sentiment_df: dataframe with sentences with single entity, score by sentiment
+    '''
+
+    print('Loading file: ' + df_loc)
+    df = pd.read_csv(df_loc, sep='\t').dropna(subset=['text'])
+    df = chunk_comments_sentences(df)
+    df = df[~df[SENTENCE_COL].str.contains(start_filter)] # remove sentences that start with a capital letter name we want to avoid
+    df = extract_skin_ner(df, ENTITY_SET)
+    try:
+        df['year_month'] = re.search('[0-9]{6}', df_loc)[0]
+    except:
+        df['year_month'] = None
+    extracted_df = df[df[ENTITY_COL].str.len() > 0]
+    single_skin_df = extracted_df[extracted_df[ENTITY_COL].str.len() ==1]
+    single_skin_df.loc[:,ENTITY_COL] = single_skin_df[ENTITY_COL].apply(lambda row: [entity for entity in row if entity not in NON_SKIN_SET])
+    single_skin_df = single_skin_df[single_skin_df[ENTITY_COL].str.len() ==1]
+    single_skin_df = calculate_sentiment(single_skin_df, sentiment_analyzer, SENTENCE_COL)
+    extracted_df.loc[:,ENTITY_COL] = extracted_df[ENTITY_COL].apply(lambda row: [entity for entity in row if entity not in NON_SKIN_SET])
+    extracted_df = extracted_df[extracted_df[ENTITY_COL].str.len() > 0]
+    return extracted_df, single_skin_df
+
+def extract_skin_ner(df, SKIN_SET, ENTITY_COL = 'extracted_skins', TEXT_COL = 'sentences'):
+    ''' Given a set of known skins, extract them
+        df: pandas dataFrame with 
+        SKIN_SET: python set with skin names ("the removed")
+        
+        returns:
+            df with additional column, ENTITY_COL, with list of extracted skins
+    '''
+    unigram_set = {skin for skin in SKIN_SET if len(skin.split()) == 1}
+    bigram_dict = defaultdict( list)
+    for skin in SKIN_SET:
+        if len(skin.split()) == 2:
+            bigram_dict[skin.split()[0]].append(skin.split()[1])
+    # This trigram dict will miss at least one skin that starts with same two words
+    trigram_dict = {skin.split()[0]:{skin.split()[1]:skin.split()[2]} for skin in SKIN_SET if len(skin.split()) == 3}
+
+
+    def get_skins_doc(doc, unigram, bigram, trigram):
+        skins = []
+        clean_word = lambda word: word.strip(string.punctuation).replace("'s", '')
+        tokens = [clean_word(word) for word in doc.split()]
+        # this is the worst code I have written in a while
+        skip = 0
+        for i, token in enumerate(tokens):
+            if skip > 0:
+                skip-=1
+                continue
+            if token in trigram and i + 2 < len(tokens) and tokens[i+1] in trigram[token] and tokens[i+2] == trigram[token][tokens[i+1]]:
+                skins.append(' '.join(tokens[i:i+3]))
+                skip =2
+            elif token in bigram and i + 1 < len(tokens) and tokens[i+1] in bigram[token]:
+                skins.append(' '.join(tokens[i:i+2]))
+                skip=1
+            elif token in unigram:
+                skins.append(token)
+        return list(set(skins))
+
+    print('Extracting entities using 1,2,3-grams')
+    df[ENTITY_COL] = df[TEXT_COL].apply(lambda row: get_skins_doc(row, unigram_set, bigram_dict, trigram_dict))
+    return df

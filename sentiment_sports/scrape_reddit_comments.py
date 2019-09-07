@@ -43,7 +43,8 @@ def get_month_pushshift( year, month, day, subreddit = 'nba'):
                 url_params.update({'before': str(hour)+'h', 'after': str(hour+hour_step) + 'h'})
                 output.extend(json.loads(requests.get(url, params=url_params).text)['data'])
             except:
-                print(f'Had problem parsing hour {start_hour} for url {url}')
+                print(f'Had problem parsing hour {hour} for url {url}')
+                time.sleep(5)
             time.sleep(0.5)
         return output
     
